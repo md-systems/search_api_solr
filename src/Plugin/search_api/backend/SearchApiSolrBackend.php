@@ -767,7 +767,7 @@ class SearchApiSolrBackend extends BackendPluginBase {
     // Get the index fields to be able to retrieve boosts.
     $index_fields = $index->getFields();
     $query_fields = array();
-    foreach ($search_fields as $search_field) {
+    foreach ((array) $search_fields as $search_field) {
       /** @var \Solarium\QueryType\Update\Query\Document\Document $document */
       $document = $index_fields[$search_field];
       $boost = $document->getBoost() ? '^' . $document->getBoost() : '';
