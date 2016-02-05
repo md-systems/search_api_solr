@@ -5,8 +5,6 @@
  * Views integration code for the Search API Solr module.
  */
 
-use Drupal\search_api\Exception\SearchApiException;
-
 /**
  * Implements hook_views_data_alter().
  *
@@ -18,15 +16,10 @@ use Drupal\search_api\Exception\SearchApiException;
 function _search_api_solr_views_data_alter(array &$data) {
   try {
     foreach (entity_load_multiple('search_api_index') as $index) {
-      /** @var \Drupal\search_api\IndexInterface $index */
-      $server = NULL;
 
-      try {
-        $server = $index->getServer();
-      }
-      catch (SearchApiException $e) {
-        // Just ignore invalid servers and skip the index.
-      }
+      /** @var \Drupal\search_api\IndexInterface $index */
+      $server = $index->hasValidServer() ? $index->getServerInstance() : NULL;
+
       if (!$server || empty($server->options['retrieve_data'])) {
         return;
       }
