@@ -10,11 +10,12 @@ namespace Drupal\Tests\search_api_solr\Kernel;
 use Drupal\search_api\Entity\Index;
 use Drupal\search_api\Entity\Server;
 use Drupal\search_api\Query\ResultSetInterface;
+use Drupal\search_api\Utility;
 use Drupal\Tests\search_api_db\Kernel\BackendTest;
 
 /**
  * Tests index and search capabilities using the Solr search backend.
- * 
+ *
  * @group search_api_solr
  */
 class SearchApiSolrTest extends BackendTest {
@@ -62,7 +63,7 @@ class SearchApiSolrTest extends BackendTest {
 
     $this->installConfig(array('search_api_test_solr'));
 
-    // Because this is a EntityUnitTest, the routing isn't built by default, so
+    // Because this is a kernel test, the routing isn't built by default, so
     // we have to force it.
     \Drupal::service('router.builder')->rebuild();
 
@@ -73,8 +74,15 @@ class SearchApiSolrTest extends BackendTest {
         $this->solrAvailable = TRUE;
       }
     }
-    catch (\Exception $e) {
-    }
+    catch (\Exception $e) {}
+  }
+
+  /**
+   * Clear the index after every test.
+   */
+  public function tearDown() {
+    $this->clearIndex();
+    parent::tearDown();
   }
 
   /**
@@ -86,8 +94,61 @@ class SearchApiSolrTest extends BackendTest {
       parent::testFramework();
     }
     else {
-      $this->pass('Error: The Solr instance could not be found. Please enable a multi-core one on http://localhost:8983/solr/d8');
+      $this->assertTrue(TRUE, 'Error: The Solr instance could not be found. Please enable a multi-core one on http://localhost:8983/solr/d8');
     }
+  }
+
+  /**
+   * Tests facets.
+   */
+  public function testFacets() {
+    $this->insertExampleContent();
+    $this->indexItems($this->indexId);
+
+    // Create a query object.
+    $query = Utility::createQuery($this->getIndex());
+
+    // Add a condition on the query object, to filter on category.
+    $conditions = $query->createConditionGroup('OR', array('facet:category'));
+    $conditions->addCondition('category', 'article_category');
+    $query->addConditionGroup($conditions);
+
+    // Add facet to the query.
+    $facets['category'] = array(
+      'field' => 'category',
+      'limit' => 10,
+      'min_count' => 1,
+      'missing' => TRUE,
+      'operator' => 'or',
+    );
+    $query->setOption('search_api_facets', $facets);
+
+    // Get the result.
+    $results = $query->execute();
+
+    $expected_results = array(
+      'entity:entity_test/4:en',
+      'entity:entity_test/5:en',
+    );
+
+    // Asserts that the result count is correct, as well as that the entities 4
+    // and 5 returned. And that the added condition actually filtered out the
+    // results so that the category of the returned results is article_category.
+    $this->assertEquals($expected_results, array_keys($results->getResultItems()));
+    $this->assertEquals(array('article_category'), $results->getResultItems()['entity:entity_test/4:en']->getField('category')->getValues());
+    $this->assertEquals(array('article_category'), $results->getResultItems()['entity:entity_test/5:en']->getField('category')->getValues());
+    $this->assertEquals(2, $results->getResultCount(), 'OR facets query returned correct number of results.');
+
+    $expected = array(
+      array('count' => 2, 'filter' => '"article_category"'),
+      array('count' => 2, 'filter' => '"item_category"'),
+      array('count' => 1, 'filter' => '!'),
+    );
+    $category_facets = $results->getExtraData('search_api_facets')['category'];
+    usort($category_facets, array($this, 'facetCompare'));
+
+    // Asserts that the returned facets are those that we expected.
+    $this->assertEquals($expected, $category_facets, 'Correct OR facets were returned');
   }
 
   /**
@@ -103,6 +164,7 @@ class SearchApiSolrTest extends BackendTest {
    * {@inheritdoc}
    */
   protected function clearIndex() {
+    /** @var \Drupal\search_api\IndexInterface $index */
     $index = Index::load($this->indexId);
     $index->clear();
     // Deleting items take at least 1 second for Solr to parse it so that drupal
@@ -151,7 +213,7 @@ class SearchApiSolrTest extends BackendTest {
     sleep(2);
     $query = $this->buildSearch();
     $results = $query->execute();
-    $this->assertEqual($results->getResultCount(), 0, 'Clearing the server worked correctly.');
+    $this->assertEquals(0, $results->getResultCount(), 'Clearing the server worked correctly.');
   }
 
   /**

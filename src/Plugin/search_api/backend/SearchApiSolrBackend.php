@@ -1175,12 +1175,11 @@ class SearchApiSolrBackend extends BackendPluginBase {
    *   An array describing facets that apply to the current results.
    */
   protected function extractFacets(QueryInterface $query, Result $resultset) {
-    $facets = array();
-
     if (!$resultset->getFacetSet()) {
-      return $facets;
+      return array();
     }
 
+    $facets = array();
     $index = $query->getIndex();
     $field_names = $this->getFieldNames($index);
     $fields = $index->getFields();
@@ -1356,9 +1355,11 @@ class SearchApiSolrBackend extends BackendPluginBase {
    */
   protected function setFacets(array $facets, array $field_names, Query $solarium_query) {
     $fq = array();
-    if (!$facets) {
+
+    if (empty($facets)) {
       return;
     }
+
     $facet_set = $solarium_query->getFacetSet();
     $facet_set->setSort('count');
     $facet_set->setLimit(10);
@@ -1373,7 +1374,7 @@ class SearchApiSolrBackend extends BackendPluginBase {
       // String fields have their own corresponding facet fields.
       $field = $field_names[$info['field']];
       // Check for the "or" operator.
-      if (isset($info['operator']) && $info['operator'] === 'or') {
+      if (isset($info['operator']) && strtolower($info['operator']) === 'or') {
         // Remember that filters for this field should be tagged.
         $escaped = SearchApiSolrUtility::escapeFieldName($field_names[$info['field']]);
         $taggedFields[$escaped] = "{!tag=$escaped}";
@@ -1393,11 +1394,16 @@ class SearchApiSolrBackend extends BackendPluginBase {
       if ($info['min_count'] != 1) {
         $facet_field->setMinCount($info['min_count']);
       }
+
       // Set missing, if specified.
       if ($info['missing']) {
         $facet_field->setMissing(TRUE);
       }
+      else {
+        $facet_field->setMissing(FALSE);
+      }
     }
+
     // Tag filters of fields with "OR" facets.
     foreach ($taggedFields as $field => $tag) {
       $regex = '#(?<![^( ])' . preg_quote($field, '#') . ':#';
